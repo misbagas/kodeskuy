@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Working Code Editor</title>
+
+  <style>
+    body { margin: 0; background: #1e1e1e; }
+    .toolbar {
+      height: 50px;
+      background: #2d2d2d;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 6px 12px;
+      background: #007acc;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+    #editor { height: 50vh; }
+    #output { height: 50vh; width: 100%; border: none; background: white; }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button onclick="runCode()">Run</button>
+  <button onclick="saveCode()">Save</button>
+</div>
+
+<div id="editor"></div>
+<iframe id="output" sandbox="allow-scripts"></iframe>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+
+<script>
+  let editor;
+
+  // FIX: proper worker config
+  window.MonacoEnvironment = {
+    getWorkerUrl: function () {
+      return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+        self.MonacoEnvironment = { baseUrl: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/' };
+        importScripts('https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/base/worker/workerMain.js');
+      `)}`;
+    }
+  };
+
+  require.config({
+    paths: {
+      vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
+    }
+  });
+
+  require(['vs/editor/editor.main'], function () {
+
+    editor = monaco.editor.create(document.getElementById('editor'), {
+      value: `<!DOCTYPE html>
+<html>
+<body>
+<h1>Hello 🚀</h1>
+<button onclick="alert('Works!')">Click</button>
+</body>
+</html>`,
+      language: 'html',
+      theme: 'vs-dark',
+      automaticLayout: true
+    });
+
+  });
+
+  function runCode() {
+    if (!editor) {
+      alert("Editor not loaded yet!");
+      return;
+    }
+    document.getElementById('output').srcdoc = editor.getValue();
+  }
+
+  function saveCode() {
+    const blob = new Blob([editor.getValue()], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'index.html';
+    a.click();
+  }
+</script>
+
+</body>
+</html>
