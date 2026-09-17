@@ -7,75 +7,143 @@ const backendBaseUrl =
 export default function App() {
   const editorRef = useRef(null);
   const [language, setLanguage] = useState("html");
+  const [stdinInput, setStdinInput] = useState("");
+  const [output, setOutput] = useState("");
 
   function handleEditorDidMount(editor) {
     editorRef.current = editor;
   }
 
 async function runCode() {
-  const code = editorRef.current.getValue();
-  const outputDiv = document.getElementById("output");
-  const runEndpoint = `${backendBaseUrl}/run`;
+    const code = editorRef.current?.getValue() || "";
 
-  // 🔹 HTML → render
-  if (language === "html") {
-    outputDiv.innerHTML = code;
-    return;
-  }
+    setOutput("");
 
-  // 🔹 JS → run in browser
-  if (language === "javascript") {
+    // =========================
+    // HTML
+    // =========================
+    if (language === "html") {
+        setHtmlOutput(code);
+        return;
+    }
+
+    // =========================
+    // CSS
+    // =========================
+    if (language === "css") {
+        setHtmlOutput(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    ${code}
+                </style>
+            </head>
+            <body>
+                <h1>CSS Preview</h1>
+                <p>This page is controlled by your CSS.</p>
+            </body>
+            </html>
+        `);
+
+        return;
+    }
+
+    // =========================
+    // JavaScript
+    // =========================
+    if (language === "javascript") {
+        try {
+            const logs = [];
+
+            const originalLog = console.log;
+
+            console.log = (...args) => {
+                logs.push(args.join(" "));
+            };
+
+            try {
+                eval(code);
+            } finally {
+                console.log = originalLog;
+            }
+
+            setOutput(logs.join("\n") || "No output");
+        } catch (err) {
+            setOutput(`JavaScript Error: ${err.message}`);
+        }
+
+        return;
+    }
+
+    // =========================
+    // JSON
+    // =========================
+    if (language === "json") {
+        try {
+            const parsed = JSON.parse(code);
+
+            setOutput(
+                JSON.stringify(parsed, null, 2)
+            );
+        } catch (err) {
+            setOutput(`JSON Error: ${err.message}`);
+        }
+
+        return;
+    }
+
+    // =========================
+    // Backend languages
+    // =========================
+
+    let backendLang = language;
+
+    if (language === "shell") {
+        backendLang = "bash";
+    }
+
+    setOutput(`Running ${backendLang}...`);
+
     try {
-      const logs = [];
-      const originalLog = console.log;
+        const res = await fetch(`${backendBaseUrl}/run`, {
+            method: "POST",
 
-      console.log = (...args) => {
-        logs.push(args.join(" "));
-      };
+            headers: {
+                "Content-Type": "application/json"
+            },
 
-      eval(code);
+            body: JSON.stringify({
+                code,
+                language: backendLang,
+                input: stdinInput
+            })
+        });
 
-      console.log = originalLog;
+        const data = await res.json().catch(() => ({}));
 
-      outputDiv.textContent = logs.join("\n") || "No output";
+        if (!res.ok) {
+            setOutput(
+                data.error ||
+                `Backend error: ${res.status}`
+            );
+
+            return;
+        }
+
+        setOutput(
+            data.output ??
+            data.error ??
+            "Program produced no output."
+        );
+
     } catch (err) {
-      outputDiv.textContent = "Error: " + err.message;
+        setOutput(
+            `Cannot connect to compiler backend.\n\n` +
+            `${err.message}`
+        );
     }
-    return;
-  }
-
-  // 🔥 Backend languages
-  let backendLang = language;
-  if (language === "shell") backendLang = "bash";
-
-  try {
-    const res = await fetch(runEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        code,
-        language: backendLang
-      })
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      outputDiv.textContent = data.error || `Request failed with status ${res.status}`;
-      return;
-    }
-
-    outputDiv.textContent =
-      data.output ?? data.error ?? "No output";
-
-  } catch (err) {
-    outputDiv.textContent =
-      "Error: unable to reach the code runner backend at http://localhost:3000/run. Start the Go server on port 3000 or set VITE_BACKEND_URL.";
-  }
 }
-
 const templates = {
   javascript: "console.log('Hello JS')",
   python: "print('Hello Python')",
@@ -150,15 +218,16 @@ const templates = {
      <div
   id="output"
   style={{
-    height: "250px", // Fixed height for output so it sits neatly at the bottom
+    height: "160px",
     background: "#1e1e1e",
     color: "#ffffff",
     padding: "10px",
     fontFamily: "monospace",
+    whiteSpace: "pre-wrap",
     overflow: "auto",
     borderTop: "2px solid #333"
   }}
-></div>
+>{output}</div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -52,7 +53,7 @@ func runCode(code string, lang string, input string) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(dir)
-	mountDir := filepath.ToSlash(dir)
+	mountDir := dockerMountPath(dir)
 
 	var fileName string
 	var dockerCmd []string
@@ -144,18 +145,18 @@ func runCode(code string, lang string, input string) (string, error) {
 			"go", "run", "main.go",
 		}
 
-	case "cpp":
+	case "cpp", "c++", "cxx", "cc":
 		fileName = filepath.Join(dir, "main.cpp")
 		if err := os.WriteFile(fileName, []byte(code), 0644); err != nil {
 			return "", err
 		}
 
 		dockerCmd = []string{
-			"run", "--rm",
+			"run", "--rm", "-i",
 			"-v", mountDir + ":/app",
 			"-w", "/app",
-			"gcc",
-			"sh", "-c", "g++ main.cpp -o a && ./a",
+			"gcc:13",
+			"sh", "-c", "g++ -std=c++17 main.cpp -O2 -o a && ./a",
 		}
 
 	case "java":
@@ -211,7 +212,26 @@ func runCode(code string, lang string, input string) (string, error) {
 		return string(out) + "\nError: " + err.Error(), nil
 	}
 
+	if len(strings.TrimSpace(string(out))) == 0 {
+		return "Program finished with no output.", nil
+	}
+
 	return string(out), nil
+}
+
+func dockerMountPath(path string) string {
+	if runtime.GOOS != "windows" {
+		return filepath.ToSlash(path)
+	}
+
+	converted := filepath.ToSlash(path)
+	if len(converted) < 2 || converted[1] != ':' {
+		return converted
+	}
+
+	// Convert C:/path -> /c/path for better compatibility with Docker bind mounts.
+	drive := strings.ToLower(string(converted[0]))
+	return "/" + drive + converted[2:]
 }
 
 func cleanupFiles() {
